@@ -26,8 +26,8 @@
             book: {
                 title: '.detailsBookContainer_bookName__pLCtW',
                 summary: '.productSummary_summeryText__Pd_tX',
-                specificationSummary: '.productSpecificationSummary_active__HN8eL .productSpecificationSummary_content__x3O5P',
-                mainImage: '.lookInside_imageContainer__A2WcA img', // <<< UPDATED SELECTOR HERE
+                specificationSummary: '.productSpecification_tableBody__z2UzC', // <<< CORRECTED SELECTOR
+                mainImage: '.lookInside_imageContainer__A2WcA img',
                 listImages: '.bookImageThumbs_bookImageThumb__368gC img', // Selector for the list <img> tags
             }
         },
