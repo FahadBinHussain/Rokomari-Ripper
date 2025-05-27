@@ -84,15 +84,31 @@ async function fetchSpecifications(bookUrl, bookId) {
         console.log(`Fetching specifications via API for book ID: ${bookId}...`);
         const response = await axios.post(bookUrl, payload, { headers });
         
-        // The response structure you provided: 0: [someId, null], 1: [{key:val}, ...]
-        // We are interested in the second element of the outer array, which is an array of spec objects.
-        if (response.data && Array.isArray(response.data) && response.data.length > 1 && Array.isArray(response.data[1])) {
-             // The actual specification data seems to be in response.data[1]
-            const specs = response.data[1];
-            console.log('Successfully fetched and parsed specifications from API.');
-            return specs;
+        // The response.data is a string like: "0:[...idk...]\n1:[{key:val}, ...]"
+        // Or sometimes concatenated: "0:[...idk...]1:[{key:val}, ...]"
+        // We need to extract the array part that follows "1:"
+        if (response.data && typeof response.data === 'string') {
+            const marker = "1:["; // Data we want starts with [{ after "1:"
+            const startIndex = response.data.indexOf(marker);
+
+            if (startIndex !== -1) {
+                // Extract the substring that IS the JSON array, starting from '['
+                const jsonString = response.data.substring(startIndex + marker.length - 1); 
+                try {
+                    const specs = JSON.parse(jsonString);
+                    console.log('Successfully fetched and parsed specifications from API.');
+                    return specs;
+                } catch (parseError) {
+                    console.error('Error parsing specifications JSON:', parseError);
+                    console.error('Attempted to parse:', jsonString);
+                    return null;
+                }
+            } else {
+                console.warn('Marker "1:[" not found in specifications API response string:', response.data);
+                return null;
+            }
         } else {
-            console.warn('Unexpected response structure from specifications API:', response.data);
+            console.warn('Unexpected response data type or empty response from specifications API:', typeof response.data);
             return null;
         }
     } catch (error) {
