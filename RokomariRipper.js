@@ -300,7 +300,7 @@
     }
 
     // --- Main Function to Extract and Display ---
-    function extractAndShowProductInfo() {
+    async function extractAndShowProductInfo() {
         console.log("[Product Extractor] Starting extraction...");
 
         const existingBox = document.getElementById(config.overlayId);
@@ -313,6 +313,23 @@
         const pageType = getPageType();
         const currentSelectors = config.selectors[pageType] || config.selectors.product;
         console.log(`[Product Extractor] Detected page type: ${pageType}`);
+
+        if (pageType === 'book') {
+            try {
+                const specButtonSelector = 'button.productSpecificationSummary_btn__LyYiW:nth-of-type(2)';
+                const specButton = document.querySelector(specButtonSelector);
+                if (specButton) {
+                    console.log("[Product Extractor] Found specification button, clicking...");
+                    specButton.click();
+                    await new Promise(resolve => setTimeout(resolve, 500)); // Wait for content to load
+                    console.log("[Product Extractor] Waited for specifications to load.");
+                } else {
+                    console.warn("[Product Extractor] Specification button not found with selector:", specButtonSelector);
+                }
+            } catch (e) {
+                console.error("[Product Extractor] Error clicking specification button:", e);
+            }
+        }
 
         const title = getElementText(currentSelectors.title);
         const summary = getElementText(currentSelectors.summary);

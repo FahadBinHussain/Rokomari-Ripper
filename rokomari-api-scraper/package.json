@@ -1,0 +1,23 @@
+{
+  "name": "rokomari-api-scraper",
+  "version": "1.0.0",
+  "description": "A Node.js script to scrape Rokomari book details using a direct API call for specifications and Puppeteer for other details.",
+  "main": "scrape.js",
+  "scripts": {
+    "start": "node scrape.js",
+    "scrape": "node scrape.js"
+  },
+  "keywords": [
+    "rokomari",
+    "scraper",
+    "axios",
+    "puppeteer",
+    "nodejs"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.6.0",
+    "puppeteer": "^22.0.0"
+  }
+} 
