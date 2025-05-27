@@ -26,6 +26,7 @@
             book: {
                 title: '.detailsBookContainer_bookName__pLCtW',
                 summary: '.productSummary_summeryText__Pd_tX',
+                specificationSummary: '.productSpecificationSummary_active__HN8eL .productSpecificationSummary_content__x3O5P',
                 mainImage: '.lookInside_imageContainer__A2WcA img', // <<< UPDATED SELECTOR HERE
                 listImages: '.bookImageThumbs_bookImageThumb__368gC img', // Selector for the list <img> tags
             }
@@ -315,6 +316,10 @@
 
         const title = getElementText(currentSelectors.title);
         const summary = getElementText(currentSelectors.summary);
+        let specificationSummary = null;
+        if (pageType === 'book' && currentSelectors.specificationSummary) {
+            specificationSummary = getElementText(currentSelectors.specificationSummary);
+        }
         const rawMainImageUrl = extractMainImageUrl(pageType, currentSelectors);
         const rawListImageUrls = extractListImageUrls(pageType, currentSelectors);
 
@@ -324,13 +329,16 @@
 
         console.log("[Product Extractor] Title:", title);
         console.log("[Product Extractor] Summary:", summary ? summary.substring(0, 100) + '...' : null);
+        if (pageType === 'book') {
+            console.log("[Product Extractor] Specification Summary:", specificationSummary ? specificationSummary.substring(0, 100) + '...' : null);
+        }
         console.log("[Product Extractor] Main Image URL (Raw):", rawMainImageUrl);
         console.log("[Product Extractor] Main Image URL (Modified):", mainImageUrl);
         console.log("[Product Extractor] List Image URLs (Raw):", rawListImageUrls);
         console.log("[Product Extractor] List Image URLs (Modified & Unique):", uniqueListImageUrls);
 
-        if (!title && !summary && !mainImageUrl && uniqueListImageUrls.length === 0) {
-            alert(`[Product Extractor] Could not find Title, Summary, Main Image URL, or List Image URLs for this ${pageType} page using the current selectors. Please check console for errors.`);
+        if (!title && !summary && !mainImageUrl && uniqueListImageUrls.length === 0 && (pageType !== 'book' || !specificationSummary)) {
+            alert(`[Product Extractor] Could not find Title, Summary, Main Image URL, List Image URLs, or Specification Summary for this ${pageType} page using the current selectors. Please check console for errors.`);
             console.warn("[Product Extractor] No data found.");
             return;
         }
@@ -455,6 +463,9 @@
 
         addSection('Title', title, { allowCopy: true, copyLabel: 'Copy' });
         addSection('Summary', summary, { allowCopy: true, copyLabel: 'Copy' });
+        if (pageType === 'book') {
+            addSection('Specification', specificationSummary, { allowCopy: true, copyLabel: 'Copy' });
+        }
         addSection('Main Image', mainImageUrl, { isUrl: true, allowCopy: true, copyLabel: 'Copy URL' });
         addSection('Other Images', uniqueListImageUrls, { isList: true, allowCopy: true });
 
