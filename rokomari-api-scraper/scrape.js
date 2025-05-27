@@ -1,5 +1,5 @@
-const puppeteer = require('puppeteer');
 const axios = require('axios');
+const cheerio = require('cheerio');
 
 // Hardcoded next-action ID (as requested)
 const NEXT_ACTION_ID = '28417b2a8c56565e7953dccc20653cea74746d3a';
@@ -8,20 +8,13 @@ const config = {
     selectors: {
         book: {
             title: '.detailsBookContainer_bookName__pLCtW',
-            summary: '.productSummary_summeryText__Pd_tX', // Assuming this is for books
+            summary: '.productSummary_summeryText__Pd_tX',
             mainImage: '.lookInside_imageContainer__A2WcA img', 
             listImages: '.bookImageThumbs_bookImageThumb__368gC img', 
-            // Note: specificationSummary selector is not needed here as we get it from API
         },
-        // We might need product selectors if you plan to scrape general product pages too
-        product: { // Assuming these are fallbacks or for non-book product pages
-            title: '.mb-0.title, .details-book-main__title, .product-title__title',
-            summary: '.details-ql-editor.ql-editor.summary, .details-book-additional__content-pane', 
-            // mainImage for product might need different logic (e.g., background-image)
-            // listImagesContainer for product: 'li.js--list-img', 
-        }
+        // Add product selectors if needed for other page types
     },
-    targetDimensions: '260X372', // From your UserScript for image URL modification
+    targetDimensions: '260X372',
     regex: {
         dimensionPart: /(\/(?:ProductNew\d+|product|book|Content)\/)\d+X\d+(\/.*)/i
     }
@@ -37,24 +30,17 @@ function getBookIdFromUrl(url) {
     }
 }
 
-// Re-implementing your UserScript's image URL modification logic in Node.js
 function modifyUrlToTargetDimensions(url, targetDimensions, dimensionRegex) {
-    if (!url || typeof url !== 'string') {
-        return url;
-    }
+    if (!url || typeof url !== 'string') return url;
     try {
         const match = url.match(dimensionRegex);
         if (match && match[1] && match[2]) {
             const currentDimensionInUrl = url.substring(url.indexOf(match[1]) + match[1].length, url.indexOf(match[2]));
-            if (currentDimensionInUrl.toUpperCase() === targetDimensions.toUpperCase()) {
-                return url;
-            }
+            if (currentDimensionInUrl.toUpperCase() === targetDimensions.toUpperCase()) return url;
             const baseUrlPart = url.substring(0, url.indexOf(match[1]));
             return baseUrlPart + match[1] + targetDimensions + match[2];
         }
-    } catch (e) {
-        console.error(`Error modifying URL "${url}":`, e);
-    }
+    } catch (e) { console.error(`Error modifying URL "${url}":`, e); }
     return url;
 }
 
@@ -63,44 +49,29 @@ async function fetchSpecifications(bookUrl, bookId) {
         console.warn('No book ID provided for fetching specifications.');
         return null;
     }
-
-    const payload = JSON.stringify([bookId]); // Payload is ["BOOK_ID"]
-
+    const payload = JSON.stringify([bookId]);
     const headers = {
         'accept': 'text/x-component',
-        'accept-language': 'en-US,en;q=0.9',
         'content-type': 'text/plain;charset=UTF-8',
         'next-action': NEXT_ACTION_ID,
         'origin': 'https://www.rokomari.com',
         'referer': bookUrl,
-        // It's important to use a realistic User-Agent
         'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        // Cookies might be necessary. This is a complex part.
-        // For now, we omit them, but if the request fails, this is a key area to investigate.
-        // 'cookie': 'your_cookie_string_here' 
     };
-
     try {
         console.log(`Fetching specifications via API for book ID: ${bookId}...`);
         const response = await axios.post(bookUrl, payload, { headers });
-        
-        // The response.data is a string like: "0:[...idk...]\n1:[{key:val}, ...]"
-        // Or sometimes concatenated: "0:[...idk...]1:[{key:val}, ...]"
-        // We need to extract the array part that follows "1:"
         if (response.data && typeof response.data === 'string') {
-            const marker = "1:["; // Data we want starts with [{ after "1:"
+            const marker = "1:[";
             const startIndex = response.data.indexOf(marker);
-
             if (startIndex !== -1) {
-                // Extract the substring that IS the JSON array, starting from '['
-                const jsonString = response.data.substring(startIndex + marker.length - 1); 
+                const jsonString = response.data.substring(startIndex + marker.length - 1);
                 try {
                     const specs = JSON.parse(jsonString);
                     console.log('Successfully fetched and parsed specifications from API.');
                     return specs;
                 } catch (parseError) {
-                    console.error('Error parsing specifications JSON:', parseError);
-                    console.error('Attempted to parse:', jsonString);
+                    console.error('Error parsing specifications JSON:', parseError, 'Attempted to parse:', jsonString);
                     return null;
                 }
             } else {
@@ -112,84 +83,59 @@ async function fetchSpecifications(bookUrl, bookId) {
             return null;
         }
     } catch (error) {
-        console.error(`Error fetching specifications from API for book ID ${bookId}:`);
-        if (error.response) {
-            console.error('Status:', error.response.status);
-            console.error('Headers:', JSON.stringify(error.response.headers, null, 2));
-            console.error('Data:', error.response.data); // This might be HTML if the request was redirected or errored out
-        } else if (error.request) {
-            console.error('No response received:', error.request);
-        } else {
-            console.error('Error setting up request:', error.message);
-        }
+        console.error(`Error fetching specifications from API for book ID ${bookId}:`, error.message);
+        if (error.response) { console.error('Status:', error.response.status, 'Data:', error.response.data); }
         return null;
     }
 }
 
 async function scrapeRokomariBook(url) {
-    let browser;
     const bookId = getBookIdFromUrl(url);
     let allData = { url, bookId, title: null, summary: null, mainImage: null, listImages: [], specifications: null, error: null };
 
     try {
-        console.log(`Launching headless browser for initial page data...`);
-        browser = await puppeteer.launch({
-            headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
+        console.log(`Fetching main page HTML from ${url} with Axios...`);
+        const pageResponse = await axios.get(url, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            }
         });
-        const page = await browser.newPage();
-        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+        const html = pageResponse.data;
+        const $ = cheerio.load(html);
 
-        console.log(`Navigating to ${url} with Puppeteer...`);
-        await page.goto(url, { waitUntil: 'networkidle2' });
-
-        // Determine selectors based on page type (assuming 'book' for now)
-        const currentSelectors = config.selectors.book; // Simplified for this example
+        const currentSelectors = config.selectors.book; // Assuming 'book' for now
 
         // Extract Title
-        try {
-            allData.title = await page.$eval(currentSelectors.title, el => el.textContent.trim());
-            console.log(`Title (Puppeteer): ${allData.title}`);
-        } catch (e) { console.error(`Could not extract title with Puppeteer: ${e.message}`); }
+        allData.title = $(currentSelectors.title).first().text().trim();
+        console.log(`Title (Cheerio): ${allData.title}`);
 
         // Extract Summary
-        try {
-            allData.summary = await page.$eval(currentSelectors.summary, el => el.textContent.trim());
-            console.log(`Summary (Puppeteer): ${(allData.summary || '').substring(0,100)}...`);
-        } catch (e) { console.error(`Could not extract summary with Puppeteer: ${e.message}`); }
+        allData.summary = $(currentSelectors.summary).first().text().trim();
+        console.log(`Summary (Cheerio): ${(allData.summary || '').substring(0,100)}...`);
 
         // Extract Main Image
-        try {
-            const rawMainImageUrl = await page.$eval(currentSelectors.mainImage, el => el.src || el.dataset.src);
-            allData.mainImage = modifyUrlToTargetDimensions(rawMainImageUrl, config.targetDimensions, config.regex.dimensionPart);
-            console.log(`Main Image (Puppeteer, Modified): ${allData.mainImage}`);
-        } catch (e) { console.error(`Could not extract main image with Puppeteer: ${e.message}`); }
+        const rawMainImageUrl = $(currentSelectors.mainImage).first().attr('src') || $(currentSelectors.mainImage).first().attr('data-src');
+        allData.mainImage = modifyUrlToTargetDimensions(rawMainImageUrl, config.targetDimensions, config.regex.dimensionPart);
+        console.log(`Main Image (Cheerio, Modified): ${allData.mainImage}`);
         
         // Extract List Images
-        try {
-            const rawListImageUrls = await page.$$eval(currentSelectors.listImages, imgs => imgs.map(img => img.src || img.dataset.src));
-            allData.listImages = rawListImageUrls
-                .map(src => modifyUrlToTargetDimensions(src, config.targetDimensions, config.regex.dimensionPart))
-                .filter(src => src);
-            console.log(`List Images (Puppeteer, Modified): ${allData.listImages.length} found`);
-        } catch (e) { console.error(`Could not extract list images with Puppeteer: ${e.message}`); }
+        $(currentSelectors.listImages).each((i, img) => {
+            const rawSrc = $(img).attr('src') || $(img).attr('data-src');
+            const modifiedSrc = modifyUrlToTargetDimensions(rawSrc, config.targetDimensions, config.regex.dimensionPart);
+            if (modifiedSrc) {
+                allData.listImages.push(modifiedSrc);
+            }
+        });
+        console.log(`List Images (Cheerio, Modified): ${allData.listImages.length} found`);
 
-        if (browser) {
-            await browser.close();
-            console.log('Browser closed after initial data extraction.');
-        }
-
-        // Fetch specifications using Axios
+        // Fetch specifications using Axios (as before)
         if (bookId) {
             allData.specifications = await fetchSpecifications(url, bookId);
         }
 
     } catch (error) {
-        console.error(`An error occurred during the overall scraping process for ${url}: ${error.message}`);
+        console.error(`An error occurred during the scraping process for ${url}: ${error.message}`);
         allData.error = error.message;
-        if (browser) {
-            await browser.close(); // Ensure browser is closed on error
-        }
     }
     return allData;
 }
@@ -197,16 +143,12 @@ async function scrapeRokomariBook(url) {
 // --- Example Usage ---
 (async () => {
     const bookUrl = process.argv[2] || 'https://www.rokomari.com/book/48659/masud-rana-hacker-1-and-2';
-
     if (!bookUrl || !bookUrl.startsWith('http')) {
         console.error("Please provide a valid Rokomari book URL.");
-        console.log("Example: node scrape.js https://www.rokomari.com/book/some-book-id/book-name");
         return;
     }
-
     console.log(`Starting full scrape for: ${bookUrl}`);
     const productData = await scrapeRokomariBook(bookUrl);
-
     console.log("\n--- Combined Extracted Data ---");
     console.log(JSON.stringify(productData, null, 2));
 })(); 
